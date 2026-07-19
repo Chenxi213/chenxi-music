@@ -156,8 +156,18 @@ function registerShortcuts() {
 
 // ---------- 自动更新 ----------
 function registerUpdater() {
-  // 更新源配置（打包后替换为真实地址）
-  autoUpdater.setFeedURL('https://releases.example.com/chenxi-music');
+  // GitHub Releases 自动更新：每次 push tag (v*) 到 main 后
+  // GitHub Actions 打包并发布到 Releases，autoUpdater 自动检测
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'Chenxi213',
+    repo: 'chenxi-music'
+  });
+
+  // 启动时自动检查一次更新（静默，不弹窗打扰）
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }, 10000);
 
   autoUpdater.on('update-available', (info) => {
     mainWindow?.webContents.send('app:update-available', info);
@@ -170,9 +180,21 @@ function registerUpdater() {
   });
   autoUpdater.on('update-downloaded', () => {
     mainWindow?.webContents.send('app:update-downloaded');
+    // 下载完成后提示重启安装
+    const { dialog } = require('electron');
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: '更新就绪',
+      message: '新版本已下载完成，重启后即可安装。',
+      buttons: ['立即重启', '稍后'],
+      defaultId: 0
+    }).then(({ response }) => {
+      if (response === 0) autoUpdater.quitAndInstall();
+    });
   });
   autoUpdater.on('error', (err) => {
-    mainWindow?.webContents.send('app:update-error', err.message);
+    // 静默处理网络错误，不打扰用户
+    console.log('更新检查:', err.message);
   });
 
   ipcMain.handle('app:check-update', async () => {
