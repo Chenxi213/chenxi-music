@@ -1,0 +1,77 @@
+{
+  "name": "chenxi-music",
+  "version": "0.1.0",
+  "description": "辰曦音乐 - 发烧级无障碍音乐播放器",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "postinstall": "electron-builder install-app-deps",
+    "build": "electron-builder --win",
+    "build:dir": "electron-builder --win --dir",
+    "rebuild": "electron-rebuild"
+  },
+  "keywords": ["music", "player", "accessibility", "hi-res", "zdsr", "blind"],
+  "author": "ChenXi",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "28.3.3",
+    "electron-builder": "^24.9.1",
+    "electron-rebuild": "^3.2.9"
+  },
+  "dependencies": {},
+  "optionalDependencies": {
+    "ffi-napi": "^4.0.3",
+    "ref-napi": "^3.0.0",
+    "ref-struct-napi": "^1.1.1"
+  },
+  "build": {
+    "appId": "cn.chenxi.music",
+    "productName": "辰曦音乐",
+    "copyright": "Copyright © 2025 ChenXi",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "built-in-sources/**/*",
+      "native/**/*",
+      "!src/**/*.test.js",
+      "!**/node_modules/.cache/**"
+    ],
+    "extraResources": [
+      {
+        "from": "README.md",
+        "to": "README.md"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-${version}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "辰曦音乐",
+      "uninstallDisplayName": "辰曦音乐"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://releases.example.com/chenxi-music"
+    }
+  }
+}
