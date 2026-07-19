@@ -4,6 +4,22 @@
 
 const { app, BrowserWindow, globalShortcut, Menu, ipcMain, autoUpdater } = require('electron');
 const path = require('path');
+const fs = require('fs');
+
+// ==================== 便携模式 ====================
+// 所有数据（配置、缓存、音源、歌单）存储在 exe 同级的 data/ 目录
+// 删除整个文件夹即可完全清除，实现"绿色免安装"
+const PORTABLE_FLAG = path.join(process.resourcesPath || __dirname, 'portable.flag');
+if (process.env.PORTABLE === '1' || fs.existsSync(PORTABLE_FLAG)) {
+  const exeDir = path.dirname(app.getPath('exe'));
+  const dataDir = path.join(exeDir, 'data');
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+  app.setPath('userData', dataDir);
+  app.setPath('userCache', path.join(dataDir, 'cache'));
+  app.setPath('logs', path.join(dataDir, 'logs'));
+  app.setAppDataPath(dataDir);
+  process.env.PORTABLE = '1';
+}
 const { AudioEngine } = require('./audio-engine');
 const { ZdsrBridge } = require('./zdsr-bridge');
 const { SourceManager } = require('./source-manager');

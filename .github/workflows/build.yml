@@ -1,4 +1,4 @@
-name: 辰曦音乐 - Windows 打包
+name: 辰曦音乐 - Windows 便携版打包
 
 on:
   push:
@@ -12,30 +12,26 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install dependencies
-        run: npm install
+      - run: npm install
 
-      - name: Build Electron app
+      - name: Build portable
         run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload setup exe
+      - name: Upload portable exe
         uses: actions/upload-artifact@v4
         with:
-          name: chenxi-music-setup
+          name: chenxi-music-portable
           path: dist/*.exe
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: ignore

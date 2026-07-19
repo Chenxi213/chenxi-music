@@ -43,6 +43,10 @@
     ],
     "extraResources": [
       {
+        "from": "build/portable.flag",
+        "to": "portable.flag"
+      },
+      {
         "from": "README.md",
         "to": "README.md"
       }
@@ -50,13 +54,16 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
           "arch": ["x64"]
         }
       ],
       "icon": "build/icon.ico",
       "requestedExecutionLevel": "asInvoker",
-      "artifactName": "${productName}-${version}-setup.${ext}"
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
     },
     "nsis": {
       "oneClick": false,
