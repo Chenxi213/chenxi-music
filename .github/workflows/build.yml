@@ -25,33 +25,24 @@ jobs:
           node-version: '18'
 
       - name: Install dependencies
-        run: |
-          echo "=== Node $(node -v) / NPM $(npm -v) ==="
-          npm install 2>&1
-          echo "=== Install done ==="
+        run: npm install
 
-      - name: Build Electron app
-        run: |
-          echo "=== electron-builder version ==="
-          npx electron-builder --version
-          echo "=== Building... ==="
-          npx electron-builder --win --publish always 2>&1
-          echo "=== Build exit code: $? ==="
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Electron app (no publish)
+        run: npx electron-builder --win
 
-      - name: List dist
-        if: always()
-        run: |
-          echo "=== dist contents ==="
-          dir dist /s /b 2>&1 || echo "no dist dir"
-
-      - name: Upload artifacts
+      - name: Upload setup exe
         uses: actions/upload-artifact@v4
         with:
           name: chenxi-music-setup
-          path: |
-            dist/*.exe
-            dist/*.blockmap
+          path: dist/*.exe
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload blockmap
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chenxi-music-blockmap
+          path: dist/*.blockmap
           retention-days: 30
           if-no-files-found: ignore
