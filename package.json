@@ -15,7 +15,7 @@
   "author": "ChenXi",
   "license": "MIT",
   "devDependencies": {
-    "electron": "28.3.3",
+    "electron": "28.2.0",
     "electron-builder": "^24.9.1",
     "electron-rebuild": "^3.2.9"
   },
