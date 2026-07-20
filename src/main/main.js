@@ -175,86 +175,97 @@ function registerShortcuts() {
   });
 }
 
-// ---------- 自动更新 ----------
+// ---------- 自动更新（便携版：GitHub API 检查 + 手动下载） ----------
 function registerUpdater() {
-  // GitHub Releases 自动更新 + 增量更新(blockmap)
-  autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: 'Chenxi213',
-    repo: 'chenxi-music',
-    private: false
-  });
-  autoUpdater.allowDowngrade = false;
-  autoUpdater.allowPrerelease = false;
+  const GITHUB_API = 'https://api.github.com/repos/Chenxi213/chenxi-music/releases/latest';
+  const currentVersion = app.getVersion();
 
-  // 启动时自动检查一次更新（静默，不弹窗打扰）
-  setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(() => {});
-  }, 15000);
+  // 启动时静默检查版本
+  setTimeout(() => checkUpdateSilent(), 20000);
 
-  autoUpdater.on('update-available', (info) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('app:update-available', info);
+  async function checkUpdateSilent() {
+    try {
+      const data = await fetchJson(GITHUB_API);
+      if (!data || !data.tag_name) return;
+      const latest = data.tag_name.replace(/^v/, '');
+      if (compareVersion(latest, currentVersion) > 0) {
+        // 有新版本，提示用户
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('app:update-available', {
+            version: latest,
+            releaseNotes: data.body || '',
+            url: data.html_url || 'https://github.com/Chenxi213/chenxi-music/releases'
+          });
+        }
+        // 弹窗提示（仅第一次检测到）
+        const { dialog } = require('electron');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: '发现新版本',
+            message: `辰曦音乐 ${latest} 已发布，当前版本 ${currentVersion}。\n\n是否前往下载页面？`,
+            buttons: ['前往下载', '稍后'],
+            defaultId: 0
+          }).then(({ response }) => {
+            if (response === 0) {
+              const { shell } = require('electron');
+              shell.openExternal(data.html_url || 'https://github.com/Chenxi213/chenxi-music/releases');
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.log('更新检查失败:', e.message);
     }
-  });
-  autoUpdater.on('update-not-available', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('app:update-not-available');
-    }
-  });
-  autoUpdater.on('download-progress', (progress) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('app:update-progress', progress);
-    }
-  });
-  autoUpdater.on('update-downloaded', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('app:update-downloaded');
-    }
-    const { dialog } = require('electron');
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: '更新就绪',
-        message: '新版本已下载完成，重启后即可安装。',
-        buttons: ['立即重启', '稍后'],
-        defaultId: 0
-      }).then(({ response }) => {
-        if (response === 0) autoUpdater.quitAndInstall();
-      });
-    }
-  });
-  autoUpdater.on('error', (err) => {
-    console.log('更新检查:', err.message);
-  });
+  }
 
   ipcMain.handle('app:check-update', async () => {
     try {
-      const result = await autoUpdater.checkForUpdates();
-      const hasUpdate = result && result.updateInfo && result.updateInfo.version !== app.getVersion();
+      const data = await fetchJson(GITHUB_API);
+      const latest = data?.tag_name?.replace(/^v/, '') || currentVersion;
+      const hasUpdate = compareVersion(latest, currentVersion) > 0;
       return {
-        hasUpdate: !!hasUpdate,
-        version: result?.updateInfo?.version || app.getVersion(),
-        releaseNotes: result?.updateInfo?.releaseNotes || '',
-        url: 'https://github.com/Chenxi213/chenxi-music/releases'
+        hasUpdate,
+        version: latest,
+        releaseNotes: data?.body || '',
+        url: data?.html_url || 'https://github.com/Chenxi213/chenxi-music/releases'
       };
     } catch (e) {
-      return { hasUpdate: false, version: app.getVersion(), error: e.message };
+      return { hasUpdate: false, version: currentVersion, error: e.message };
     }
   });
 
-  ipcMain.handle('app:download-update', async () => {
-    try {
-      await autoUpdater.downloadUpdate();
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
+  ipcMain.handle('app:get-version', () => ({ version: currentVersion }));
 
-  ipcMain.handle('app:get-version', () => {
-    return { version: app.getVersion() };
+  ipcMain.handle('app:open-release', () => {
+    const { shell } = require('electron');
+    shell.openExternal('https://github.com/Chenxi213/chenxi-music/releases');
   });
+}
+
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    const https = require('https');
+    https.get(url, { headers: { 'User-Agent': 'chenxi-music/' + app.getVersion() }, timeout: 10000 }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchJson(res.headers.location).then(resolve, reject);
+      }
+      let data = '';
+      res.on('data', (c) => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
+      });
+    }).on('error', reject).on('timeout', function() { this.destroy(); reject(new Error('timeout')); });
+  });
+}
+
+function compareVersion(a, b) {
+  const pa = a.split('.'); const pb = b.split('.');
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = parseInt(pa[i] || 0, 10); const nb = parseInt(pb[i] || 0, 10);
+    if (na > nb) return 1; if (na < nb) return -1;
+  }
+  return 0;
 }
 
 app.on('will-quit', () => {
