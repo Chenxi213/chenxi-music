@@ -216,8 +216,8 @@ function registerUpdater() {
     updateDownloading = true;
     const exePath = app.getPath('exe');
     const exeDir = path.dirname(exePath);
-    const newExePath = path.join(exeDir, 'chenxi-' + newVersion + '.exe');
-    const batPath = path.join(exeDir, 'update.bat');
+    const exeName = path.basename(exePath);
+    const newExePath = path.join(exeDir, '_chenxi_update.exe');
 
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('app:update-progress', { percent: 0, stage: 'downloading' });
@@ -237,25 +237,27 @@ function registerUpdater() {
       return;
     }
 
-    // 写入替换脚本
-    const bat = `@echo off
-chcp 65001 >nul
-:wait
-timeout /t 2 /nobreak >nul
-del /f /q "${exePath}" 2>nul
-move /y "${newExePath}" "${exePath}" 2>nul
-if exist "${newExePath}" goto wait
-start "" "${exePath}"
-del /f /q "%~f0"
-`;
-    fs.writeFileSync(batPath, bat, 'utf-8');
+    // 用 PowerShell 替换（原生支持 Unicode 路径，无编码问题）
+    const psScript = [
+      'Start-Sleep -Seconds 2',
+      'Remove-Item -Force "' + exePath + '" -ErrorAction SilentlyContinue',
+      'Move-Item -Force "' + newExePath + '" "' + exePath + '"',
+      'Start-Process "' + exePath + '"',
+      'Remove-Item -Force "' + path.join(exeDir, '_update.ps1') + '"'
+    ].join('; ');
+
+    const psPath = path.join(exeDir, '_update.ps1');
+    fs.writeFileSync(psPath, psScript, 'utf8');
 
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('app:update-progress', { percent: 100, stage: 'installing' });
     }
 
-    // 执行替换脚本并退出
-    require('child_process').exec(`start "" "${batPath}"`, { cwd: exeDir, detached: true, windowsHide: true });
+    // 启动 PowerShell 替换脚本并退出
+    require('child_process').exec(
+      'powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + psPath + '"',
+      { cwd: exeDir, detached: true, windowsHide: true }
+    );
     setTimeout(() => app.quit(), 500);
   }
 
