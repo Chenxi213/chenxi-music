@@ -175,17 +175,18 @@ function registerShortcuts() {
   });
 }
 
-// ---------- 自动更新（便携版：GitHub API检查+弹窗提示下载zip） ----------
+// ---------- 自动更新（绿色版：自动下载zip+解压覆盖+重启） ----------
 function registerUpdater() {
   const GITHUB_API = 'https://api.github.com/repos/Chenxi213/chenxi-music/releases/latest';
   const currentVersion = app.getVersion();
   let checked = false;
+  let updating = false;
 
   // 启动 20s 后自动检查
   setTimeout(() => checkAndPrompt(), 20000);
 
   async function checkAndPrompt() {
-    if (checked) return;
+    if (checked || updating) return;
     checked = true;
     try {
       const data = await fetchJson(GITHUB_API);
@@ -193,20 +194,107 @@ function registerUpdater() {
       const latest = data.tag_name.replace(/^v/, '');
       if (compareVersion(latest, currentVersion) <= 0) return;
 
-      const { dialog, shell } = require('electron');
+      const { dialog } = require('electron');
       const { response } = await dialog.showMessageBox(mainWindow, {
         type: 'info',
         title: '发现新版本',
-        message: `辰曦音乐 ${latest} 已发布（当前 ${currentVersion}）。\n\n请前往 Release 页面下载最新绿色免安装版。`,
-        buttons: ['前往下载', '稍后'],
+        message: `辰曦音乐 ${latest} 已发布（当前 ${currentVersion}）。\n\n是否立即下载并自动安装？`,
+        buttons: ['立即更新', '稍后'],
         defaultId: 0
       });
       if (response === 0) {
-        shell.openExternal(data.html_url || 'https://github.com/Chenxi213/chenxi-music/releases');
+        await doUpdate(data, latest);
       }
     } catch (e) {
+      checked = false; // 下次可以重试
       console.log('更新检查:', e.message);
     }
+  }
+
+  async function doUpdate(releaseData, newVersion) {
+    if (updating) return;
+    updating = true;
+
+    // 找到 zip 下载链接
+    const zipAsset = releaseData.assets.find(a => a.name && a.name.endsWith('.zip'));
+    const downloadUrl = zipAsset ? zipAsset.browser_download_url : null;
+    if (!downloadUrl) {
+      const { dialog } = require('electron');
+      await dialog.showMessageBox(mainWindow, { type: 'error', title: '更新失败', message: '未找到可下载的更新包。' });
+      updating = false;
+      return;
+    }
+
+    // 通知渲染层显示进度
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-progress', { percent: 0, stage: 'downloading', version: newVersion });
+    }
+
+    // 下载 zip 到临时文件
+    const { app } = require('electron');
+    const exeDir = path.dirname(app.getPath('exe'));
+    const tmpZip = path.join(exeDir, '_update_new.zip');
+
+    const dlOk = await downloadFile(downloadUrl, tmpZip, (percent) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-progress', { percent, stage: 'downloading', version: newVersion });
+      }
+    });
+
+    if (!dlOk) {
+      updating = false;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-error', { error: '下载失败' });
+      }
+      return;
+    }
+
+    // 写 PowerShell 脚本：等进程退出 → 解压zip覆盖旧文件 → 删除zip和脚本 → 启动新版本
+    const exePath = path.join(exeDir, '辰曦音乐.exe');
+    const psPath = path.join(exeDir, '_update.ps1');
+    const safeExeDir = exeDir.replace(/'/g, "''");
+    const safeTmpZip = tmpZip.replace(/'/g, "''");
+    const safeExePath = exePath.replace(/'/g, "''");
+    const safePsPath = psPath.replace(/'/g, "''");
+
+    const psScript = [
+      'Start-Sleep -Seconds 2',
+      'try {',
+      '  Add-Type -AssemblyName System.IO.Compression.FileSystem',
+      '  $zip = [System.IO.Compression.ZipFile]::OpenRead("' + safeTmpZip + '")',
+      '  $dest = "' + safeExeDir + '"',
+      '  foreach ($entry in $zip.Entries) {',
+      '    if ($entry.FullName.EndsWith("/")) { continue }',
+      '    $fullTarget = Join-Path $dest $entry.FullName',
+      '    $parentDir = Split-Path $fullTarget -Parent',
+      '    if (!(Test-Path $parentDir)) { New-Item -ItemType Directory -Path $parentDir -Force | Out-Null }',
+      '    try {',
+      '      $stream = $entry.Open()',
+      '      $file = [System.IO.File]::Create($fullTarget)',
+      '      $stream.CopyTo($file)',
+      '      $file.Close()',
+      '      $stream.Close()',
+      '    } catch {}',
+      '  }',
+      '  $zip.Dispose()',
+      '} catch {}',
+      'Remove-Item -Force "' + safeTmpZip + '" -ErrorAction SilentlyContinue',
+      'if (Test-Path "' + safeExePath + '") { Start-Process "' + safeExePath + '" }',
+      'Remove-Item -Force "' + safePsPath + '" -ErrorAction SilentlyContinue',
+    ].join('\r\n');
+
+    fs.writeFileSync(psPath, psScript, 'utf8');
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-progress', { percent: 100, stage: 'installing', version: newVersion });
+    }
+
+    // 启动 PowerShell 替换脚本并退出
+    require('child_process').exec(
+      'powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + psPath + '"',
+      { cwd: exeDir, detached: true, windowsHide: true }
+    );
+    setTimeout(() => app.quit(), 800);
   }
 
   ipcMain.handle('app:check-update', async () => {
@@ -214,12 +302,7 @@ function registerUpdater() {
       const data = await fetchJson(GITHUB_API);
       const latest = data?.tag_name?.replace(/^v/, '') || currentVersion;
       const hasUpdate = compareVersion(latest, currentVersion) > 0;
-      return {
-        hasUpdate,
-        version: latest,
-        releaseNotes: data?.body || '',
-        url: data?.html_url || 'https://github.com/Chenxi213/chenxi-music/releases'
-      };
+      return { hasUpdate, version: latest, releaseNotes: data?.body || '', url: data?.html_url || '' };
     } catch (e) {
       return { hasUpdate: false, version: currentVersion, error: e.message };
     }
@@ -230,6 +313,34 @@ function registerUpdater() {
   ipcMain.handle('app:open-release', () => {
     const { shell } = require('electron');
     shell.openExternal('https://github.com/Chenxi213/chenxi-music/releases');
+  });
+}
+
+function downloadFile(url, dest, onProgress) {
+  return new Promise((resolve) => {
+    const https = require('https');
+    const file = fs.createWriteStream(dest);
+    const follow = (u) => {
+      https.get(u, { headers: { 'User-Agent': 'chenxi-music/update' }, timeout: 300000 }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          follow(res.headers.location);
+          return;
+        }
+        if (res.statusCode >= 400) { file.close(); fs.unlink(dest, () => {}); resolve(false); return; }
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let downloaded = 0;
+        res.on('data', (chunk) => {
+          downloaded += chunk.length;
+          if (total > 0 && onProgress) onProgress(Math.round(downloaded / total * 100));
+        });
+        res.pipe(file);
+        file.on('finish', () => { file.close(); resolve(true); });
+        file.on('error', () => { file.close(); fs.unlink(dest, () => {}); resolve(false); });
+      }).on('error', () => { file.close(); fs.unlink(dest, () => {}); resolve(false); })
+        .on('timeout', function() { this.destroy(); file.close(); fs.unlink(dest, () => {}); resolve(false); });
+    };
+    follow(url);
   });
 }
 
