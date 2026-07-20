@@ -17,7 +17,6 @@ if (process.env.PORTABLE === '1' || fs.existsSync(PORTABLE_FLAG)) {
   app.setPath('userData', dataDir);
   app.setPath('userCache', path.join(dataDir, 'cache'));
   app.setPath('logs', path.join(dataDir, 'logs'));
-  app.setAppDataPath(dataDir);
   process.env.PORTABLE = '1';
 }
 const { AudioEngine } = require('./audio-engine');
