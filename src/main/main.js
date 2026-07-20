@@ -175,48 +175,88 @@ function registerShortcuts() {
   });
 }
 
-// ---------- 自动更新（便携版：GitHub API 检查 + 手动下载） ----------
+// ---------- 自动更新（便携版：自动下载+替换exe+重启） ----------
 function registerUpdater() {
   const GITHUB_API = 'https://api.github.com/repos/Chenxi213/chenxi-music/releases/latest';
   const currentVersion = app.getVersion();
+  let updateDownloading = false;
 
-  // 启动时静默检查版本
-  setTimeout(() => checkUpdateSilent(), 20000);
+  // 启动 20s 后自动检查
+  setTimeout(() => checkAndPrompt(), 20000);
 
-  async function checkUpdateSilent() {
+  async function checkAndPrompt() {
     try {
       const data = await fetchJson(GITHUB_API);
       if (!data || !data.tag_name) return;
       const latest = data.tag_name.replace(/^v/, '');
-      if (compareVersion(latest, currentVersion) > 0) {
-        // 有新版本，提示用户
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('app:update-available', {
-            version: latest,
-            releaseNotes: data.body || '',
-            url: data.html_url || 'https://github.com/Chenxi213/chenxi-music/releases'
-          });
-        }
-        // 弹窗提示（仅第一次检测到）
-        const { dialog } = require('electron');
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          dialog.showMessageBox(mainWindow, {
-            type: 'info',
-            title: '发现新版本',
-            message: `辰曦音乐 ${latest} 已发布，当前版本 ${currentVersion}。\n\n是否前往下载页面？`,
-            buttons: ['前往下载', '稍后'],
-            defaultId: 0
-          }).then(({ response }) => {
-            if (response === 0) {
-              const { shell } = require('electron');
-              shell.openExternal(data.html_url || 'https://github.com/Chenxi213/chenxi-music/releases');
-            }
-          });
-        }
+      if (compareVersion(latest, currentVersion) <= 0) return;
+
+      const exeAsset = data.assets.find(a => a.name && a.name.endsWith('.exe') && !a.name.includes('setup'));
+      if (!exeAsset) return;
+
+      const { dialog } = require('electron');
+      const sizeMB = Math.round(exeAsset.size / 1024 / 1024);
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: '发现新版本',
+        message: `辰曦音乐 ${latest} 已发布（当前 ${currentVersion}，${sizeMB}MB）。\n\n是否立即下载并自动安装？`,
+        buttons: ['立即更新', '稍后'],
+        defaultId: 0
+      });
+      if (response === 0) {
+        await downloadAndInstall(exeAsset.browser_download_url, latest);
       }
     } catch (e) {
-      console.log('更新检查失败:', e.message);
+      console.log('更新检查:', e.message);
     }
+  }
+
+  async function downloadAndInstall(downloadUrl, newVersion) {
+    if (updateDownloading) return;
+    updateDownloading = true;
+    const exePath = app.getPath('exe');
+    const exeDir = path.dirname(exePath);
+    const newExePath = path.join(exeDir, 'chenxi-' + newVersion + '.exe');
+    const batPath = path.join(exeDir, 'update.bat');
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-progress', { percent: 0, stage: 'downloading' });
+    }
+
+    const result = await downloadFile(downloadUrl, newExePath, (percent) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-progress', { percent, stage: 'downloading' });
+      }
+    });
+
+    if (!result.ok) {
+      updateDownloading = false;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-error', result.error);
+      }
+      return;
+    }
+
+    // 写入替换脚本
+    const bat = `@echo off
+chcp 65001 >nul
+:wait
+timeout /t 2 /nobreak >nul
+del /f /q "${exePath}" 2>nul
+move /y "${newExePath}" "${exePath}" 2>nul
+if exist "${newExePath}" goto wait
+start "" "${exePath}"
+del /f /q "%~f0"
+`;
+    fs.writeFileSync(batPath, bat, 'utf-8');
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-progress', { percent: 100, stage: 'installing' });
+    }
+
+    // 执行替换脚本并退出
+    require('child_process').exec(`start "" "${batPath}"`, { cwd: exeDir, detached: true, windowsHide: true });
+    setTimeout(() => app.quit(), 500);
   }
 
   ipcMain.handle('app:check-update', async () => {
@@ -224,12 +264,7 @@ function registerUpdater() {
       const data = await fetchJson(GITHUB_API);
       const latest = data?.tag_name?.replace(/^v/, '') || currentVersion;
       const hasUpdate = compareVersion(latest, currentVersion) > 0;
-      return {
-        hasUpdate,
-        version: latest,
-        releaseNotes: data?.body || '',
-        url: data?.html_url || 'https://github.com/Chenxi213/chenxi-music/releases'
-      };
+      return { hasUpdate, version: latest, releaseNotes: data?.body || '', url: data?.html_url || '' };
     } catch (e) {
       return { hasUpdate: false, version: currentVersion, error: e.message };
     }
@@ -237,9 +272,43 @@ function registerUpdater() {
 
   ipcMain.handle('app:get-version', () => ({ version: currentVersion }));
 
-  ipcMain.handle('app:open-release', () => {
-    const { shell } = require('electron');
-    shell.openExternal('https://github.com/Chenxi213/chenxi-music/releases');
+  ipcMain.handle('app:do-update', async () => {
+    try {
+      const data = await fetchJson(GITHUB_API);
+      const latest = data.tag_name.replace(/^v/, '');
+      if (compareVersion(latest, currentVersion) <= 0) return { ok: false, error: '已是最新版本' };
+      const exeAsset = data.assets.find(a => a.name && a.name.endsWith('.exe') && !a.name.includes('setup'));
+      if (!exeAsset) return { ok: false, error: '未找到可下载的更新包' };
+      await downloadAndInstall(exeAsset.browser_download_url, latest);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+}
+
+function downloadFile(url, dest, onProgress) {
+  return new Promise((resolve) => {
+    const https = require('https');
+    const file = fs.createWriteStream(dest);
+    https.get(url, { headers: { 'User-Agent': 'chenxi-music/' + app.getVersion() }, timeout: 300000 }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        file.close();
+        fs.unlink(dest, () => {});
+        downloadFile(res.headers.location, dest, onProgress).then(resolve);
+        return;
+      }
+      const total = parseInt(res.headers['content-length'] || '0', 10);
+      let downloaded = 0;
+      res.on('data', (chunk) => {
+        downloaded += chunk.length;
+        if (total > 0 && onProgress) onProgress(Math.round(downloaded / total * 100));
+      });
+      res.pipe(file);
+      file.on('finish', () => resolve({ ok: true }));
+      file.on('error', (e) => resolve({ ok: false, error: e.message }));
+    }).on('error', (e) => resolve({ ok: false, error: e.message }))
+      .on('timeout', function() { this.destroy(); resolve({ ok: false, error: '下载超时' }); });
   });
 }
 
