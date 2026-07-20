@@ -175,90 +175,38 @@ function registerShortcuts() {
   });
 }
 
-// ---------- 自动更新（便携版：自动下载+替换exe+重启） ----------
+// ---------- 自动更新（便携版：GitHub API检查+弹窗提示下载zip） ----------
 function registerUpdater() {
   const GITHUB_API = 'https://api.github.com/repos/Chenxi213/chenxi-music/releases/latest';
   const currentVersion = app.getVersion();
-  let updateDownloading = false;
+  let checked = false;
 
   // 启动 20s 后自动检查
   setTimeout(() => checkAndPrompt(), 20000);
 
   async function checkAndPrompt() {
+    if (checked) return;
+    checked = true;
     try {
       const data = await fetchJson(GITHUB_API);
       if (!data || !data.tag_name) return;
       const latest = data.tag_name.replace(/^v/, '');
       if (compareVersion(latest, currentVersion) <= 0) return;
 
-      const exeAsset = data.assets.find(a => a.name && a.name.endsWith('.exe') && !a.name.includes('setup'));
-      if (!exeAsset) return;
-
-      const { dialog } = require('electron');
-      const sizeMB = Math.round(exeAsset.size / 1024 / 1024);
+      const { dialog, shell } = require('electron');
       const { response } = await dialog.showMessageBox(mainWindow, {
         type: 'info',
         title: '发现新版本',
-        message: `辰曦音乐 ${latest} 已发布（当前 ${currentVersion}，${sizeMB}MB）。\n\n是否立即下载并自动安装？`,
-        buttons: ['立即更新', '稍后'],
+        message: `辰曦音乐 ${latest} 已发布（当前 ${currentVersion}）。\n\n请前往 Release 页面下载最新绿色免安装版。`,
+        buttons: ['前往下载', '稍后'],
         defaultId: 0
       });
       if (response === 0) {
-        await downloadAndInstall(exeAsset.browser_download_url, latest);
+        shell.openExternal(data.html_url || 'https://github.com/Chenxi213/chenxi-music/releases');
       }
     } catch (e) {
       console.log('更新检查:', e.message);
     }
-  }
-
-  async function downloadAndInstall(downloadUrl, newVersion) {
-    if (updateDownloading) return;
-    updateDownloading = true;
-    const exePath = app.getPath('exe');
-    const exeDir = path.dirname(exePath);
-    const exeName = path.basename(exePath);
-    const newExePath = path.join(exeDir, '_chenxi_update.exe');
-
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('app:update-progress', { percent: 0, stage: 'downloading' });
-    }
-
-    const result = await downloadFile(downloadUrl, newExePath, (percent) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('app:update-progress', { percent, stage: 'downloading' });
-      }
-    });
-
-    if (!result.ok) {
-      updateDownloading = false;
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('app:update-error', result.error);
-      }
-      return;
-    }
-
-    // 用 PowerShell 替换（原生支持 Unicode 路径，无编码问题）
-    const psScript = [
-      'Start-Sleep -Seconds 2',
-      'Remove-Item -Force "' + exePath + '" -ErrorAction SilentlyContinue',
-      'Move-Item -Force "' + newExePath + '" "' + exePath + '"',
-      'Start-Process "' + exePath + '"',
-      'Remove-Item -Force "' + path.join(exeDir, '_update.ps1') + '"'
-    ].join('; ');
-
-    const psPath = path.join(exeDir, '_update.ps1');
-    fs.writeFileSync(psPath, psScript, 'utf8');
-
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('app:update-progress', { percent: 100, stage: 'installing' });
-    }
-
-    // 启动 PowerShell 替换脚本并退出
-    require('child_process').exec(
-      'powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + psPath + '"',
-      { cwd: exeDir, detached: true, windowsHide: true }
-    );
-    setTimeout(() => app.quit(), 500);
   }
 
   ipcMain.handle('app:check-update', async () => {
@@ -266,7 +214,12 @@ function registerUpdater() {
       const data = await fetchJson(GITHUB_API);
       const latest = data?.tag_name?.replace(/^v/, '') || currentVersion;
       const hasUpdate = compareVersion(latest, currentVersion) > 0;
-      return { hasUpdate, version: latest, releaseNotes: data?.body || '', url: data?.html_url || '' };
+      return {
+        hasUpdate,
+        version: latest,
+        releaseNotes: data?.body || '',
+        url: data?.html_url || 'https://github.com/Chenxi213/chenxi-music/releases'
+      };
     } catch (e) {
       return { hasUpdate: false, version: currentVersion, error: e.message };
     }
@@ -274,43 +227,9 @@ function registerUpdater() {
 
   ipcMain.handle('app:get-version', () => ({ version: currentVersion }));
 
-  ipcMain.handle('app:do-update', async () => {
-    try {
-      const data = await fetchJson(GITHUB_API);
-      const latest = data.tag_name.replace(/^v/, '');
-      if (compareVersion(latest, currentVersion) <= 0) return { ok: false, error: '已是最新版本' };
-      const exeAsset = data.assets.find(a => a.name && a.name.endsWith('.exe') && !a.name.includes('setup'));
-      if (!exeAsset) return { ok: false, error: '未找到可下载的更新包' };
-      await downloadAndInstall(exeAsset.browser_download_url, latest);
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-}
-
-function downloadFile(url, dest, onProgress) {
-  return new Promise((resolve) => {
-    const https = require('https');
-    const file = fs.createWriteStream(dest);
-    https.get(url, { headers: { 'User-Agent': 'chenxi-music/' + app.getVersion() }, timeout: 300000 }, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        file.close();
-        fs.unlink(dest, () => {});
-        downloadFile(res.headers.location, dest, onProgress).then(resolve);
-        return;
-      }
-      const total = parseInt(res.headers['content-length'] || '0', 10);
-      let downloaded = 0;
-      res.on('data', (chunk) => {
-        downloaded += chunk.length;
-        if (total > 0 && onProgress) onProgress(Math.round(downloaded / total * 100));
-      });
-      res.pipe(file);
-      file.on('finish', () => resolve({ ok: true }));
-      file.on('error', (e) => resolve({ ok: false, error: e.message }));
-    }).on('error', (e) => resolve({ ok: false, error: e.message }))
-      .on('timeout', function() { this.destroy(); resolve({ ok: false, error: '下载超时' }); });
+  ipcMain.handle('app:open-release', () => {
+    const { shell } = require('electron');
+    shell.openExternal('https://github.com/Chenxi213/chenxi-music/releases');
   });
 }
 

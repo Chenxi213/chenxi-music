@@ -99,18 +99,22 @@ class SourceManager extends EventEmitter {
           return undefined;
         },
         utils: {
-          buffer: { from: (s) => Buffer.from(s), bufToString: (b) => b.toString() },
+          buffer: { from: (s, enc) => Buffer.from(s, enc), bufToString: (b, enc) => Buffer.isBuffer(b) ? b.toString(enc || 'utf8') : String(b) },
           crypto: {
-            md5: () => '', rsaEncrypt: () => '', randomBytes: () => Buffer.alloc(0),
-            aesEncrypt: () => '', decode: (s) => s
+            md5: (s) => { try { return require('crypto').createHash('md5').update(String(s)).digest('hex'); } catch (e) { return ''; } },
+            md5Prefix: (s) => { try { return require('crypto').createHash('md5').update(String(s)).digest('hex').substring(0, 16); } catch (e) { return ''; } },
+            rsaEncrypt: (s, key) => { try { const c = require('crypto'); return c.publicEncrypt({ key: String(key), padding: c.constants.RSA_PKCS1_PADDING }, Buffer.from(String(s))).toString('base64'); } catch (e) { return ''; } },
+            aesEncrypt: (s, key, iv, mode) => { try { const c = require('crypto'); const alg = mode === 'ECB' ? 'aes-128-ecb' : 'aes-128-cbc'; const cipher = c.createCipheriv(alg, Buffer.from(key), iv ? Buffer.from(iv) : Buffer.alloc(0)); let out = cipher.update(String(s), 'utf8', 'base64'); out += cipher.final('base64'); return out; } catch (e) { return ''; } },
+            randomBytes: (len) => { try { return require('crypto').randomBytes(Math.max(1, len || 8)).toString('hex'); } catch (e) { return Buffer.alloc(Math.max(1, len || 8)).toString('hex'); } },
+            decode: (s) => { try { return Buffer.from(String(s), 'base64').toString('utf8'); } catch (e) { return String(s); } }
           },
           url: { encode: encodeURIComponent, decode: decodeURIComponent, parse: (u) => new URL(u) }
         },
         env: 'desktop', version: '1.0.0'
       };
       const sandbox = {
-        globalThis: { lx: lxObj },  // 同一对象引用
-        lx: lxObj,                   // 同一对象引用
+        globalThis: { lx: lxObj },
+        lx: lxObj,
         console: { log: () => {}, error: () => {}, warn: () => {}, info: () => {}, debug: () => {} },
         // 使用真实定时器以支持异步流程（混淆脚本依赖）
         setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms || 0, 200)),
@@ -369,11 +373,14 @@ class SourceManager extends EventEmitter {
           );
         },
         utils: {
-          buffer: { from: (s) => Buffer.from(s), bufToString: (b) => b.toString() },
+          buffer: { from: (s, enc) => Buffer.from(s, enc), bufToString: (b, enc) => Buffer.isBuffer(b) ? b.toString(enc || 'utf8') : String(b) },
           crypto: {
-            md5: (s) => require('crypto').createHash('md5').update(s).digest('hex'),
-            rsaEncrypt: () => '', randomBytes: () => Buffer.alloc(0),
-            aesEncrypt: () => '', decode: (s) => s
+            md5: (s) => { try { return require('crypto').createHash('md5').update(String(s)).digest('hex'); } catch (e) { return ''; } },
+            md5Prefix: (s) => { try { return require('crypto').createHash('md5').update(String(s)).digest('hex').substring(0, 16); } catch (e) { return ''; } },
+            rsaEncrypt: (s, key) => { try { const c = require('crypto'); return c.publicEncrypt({ key: String(key), padding: c.constants.RSA_PKCS1_PADDING }, Buffer.from(String(s))).toString('base64'); } catch (e) { return ''; } },
+            aesEncrypt: (s, key, iv, mode) => { try { const c = require('crypto'); const alg = mode === 'ECB' ? 'aes-128-ecb' : 'aes-128-cbc'; const cipher = c.createCipheriv(alg, Buffer.from(key), iv ? Buffer.from(iv) : Buffer.alloc(0)); let out = cipher.update(String(s), 'utf8', 'base64'); out += cipher.final('base64'); return out; } catch (e) { return ''; } },
+            randomBytes: (len) => { try { return require('crypto').randomBytes(Math.max(1, len || 8)).toString('hex'); } catch (e) { return Buffer.alloc(Math.max(1, len || 8)).toString('hex'); } },
+            decode: (s) => { try { return Buffer.from(String(s), 'base64').toString('utf8'); } catch (e) { return String(s); } }
           },
           url: { encode: encodeURIComponent, decode: decodeURIComponent, parse: (u) => new URL(u) }
         },

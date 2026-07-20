@@ -38,6 +38,9 @@
         <option value="kw">酷我</option>
         <option value="mg">咪咕</option>
         <option value="qsvip">汽水VIP</option>
+        <option value="bili">B站</option>
+        <option value="git">Git音源</option>
+        <option value="local">本地</option>
       </select>
       <button id="searchBtn" class="search-btn" aria-label="搜索">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
@@ -106,24 +109,36 @@
   </div>
 </footer>
 
-<!-- ALT 功能菜单覆盖层（参考截图的菜单tab布局） -->
-<div class="alt-overlay" id="altOverlay" role="dialog" aria-label="功能菜单" hidden>
-  <div class="alt-menu" role="tablist" aria-label="菜单标签">
-    <button class="alt-tab" data-panel="play" role="tab" aria-selected="false">播放 <kbd class="alt-key">Alt+P</kbd></button>
-    <button class="alt-tab" data-panel="playlist" role="tab" aria-selected="false">歌单 <kbd class="alt-key">Alt+L</kbd></button>
-    <button class="alt-tab" data-panel="charts" role="tab" aria-selected="false">排行榜 <kbd class="alt-key">Alt+R</kbd></button>
-    <button class="alt-tab" data-panel="source" role="tab" aria-selected="false">音源 <kbd class="alt-key">F4</kbd></button>
-    <button class="alt-tab" data-panel="settings" role="tab" aria-selected="false">设置 <kbd class="alt-key">Alt+S</kbd></button>
-    <button class="alt-tab" data-panel="help" role="tab" aria-selected="false">帮助 <kbd class="alt-key">Alt+H</kbd></button>
+<!-- ALT 功能菜单覆盖层（右光标展开式菜单栏） -->
+<div class="alt-overlay" id="altOverlay" role="menubar" aria-label="功能菜单" hidden>
+  <div class="alt-menubar">
+    <button class="alt-mi" data-panel="play" role="menuitem" aria-haspopup="true" aria-expanded="false">
+      播放<span class="alt-mi-key">Alt+P</span>
+    </button>
+    <button class="alt-mi" data-panel="playlist" role="menuitem" aria-haspopup="true" aria-expanded="false">
+      歌单<span class="alt-mi-key">Alt+L</span>
+    </button>
+    <button class="alt-mi" data-panel="charts" role="menuitem" aria-haspopup="true" aria-expanded="false">
+      排行榜<span class="alt-mi-key">Alt+R</span>
+    </button>
+    <button class="alt-mi" data-panel="source" role="menuitem" aria-haspopup="true" aria-expanded="false">
+      音源<span class="alt-mi-key">F4</span>
+    </button>
+    <button class="alt-mi" data-panel="settings" role="menuitem" aria-haspopup="true" aria-expanded="false">
+      设置<span class="alt-mi-key">Alt+S</span>
+    </button>
+    <button class="alt-mi" data-panel="help" role="menuitem" aria-haspopup="true" aria-expanded="false">
+      帮助<span class="alt-mi-key">Alt+H</span>
+    </button>
     <button class="alt-close" id="altClose" aria-label="关闭菜单">✕</button>
   </div>
-  <div class="alt-panels">
-    <div class="alt-panel" id="panelPlay" role="tabpanel" hidden></div>
-    <div class="alt-panel" id="panelPlaylist" role="tabpanel" hidden></div>
-    <div class="alt-panel" id="panelCharts" role="tabpanel" hidden></div>
-    <div class="alt-panel" id="panelSource" role="tabpanel" hidden></div>
-    <div class="alt-panel" id="panelSettings" role="tabpanel" hidden></div>
-    <div class="alt-panel" id="panelHelp" role="tabpanel" hidden></div>
+  <div class="alt-dropdowns">
+    <div class="alt-dd" id="ddPlay" role="menu" aria-label="播放菜单" hidden></div>
+    <div class="alt-dd" id="ddPlaylist" role="menu" aria-label="歌单菜单" hidden></div>
+    <div class="alt-dd" id="ddCharts" role="menu" aria-label="排行榜菜单" hidden></div>
+    <div class="alt-dd" id="ddSource" role="menu" aria-label="音源菜单" hidden></div>
+    <div class="alt-dd" id="ddSettings" role="menu" aria-label="设置菜单" hidden></div>
+    <div class="alt-dd" id="ddHelp" role="menu" aria-label="帮助菜单" hidden></div>
   </div>
 </div>
 

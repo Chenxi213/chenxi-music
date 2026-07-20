@@ -30,9 +30,9 @@
     if (api?.zdsr) api.zdsr.speak(text, true);
   }
 
-  // ---------- 顶部菜单栏（已移除，改用ALT tab） ----------
-  $$('.alt-tab').forEach(btn => {
-    btn.addEventListener('click', () => openAlt(btn.dataset.panel));
+  // ---------- ALT 菜单栏事件 ----------
+  $$('.alt-mi').forEach(btn => {
+    btn.addEventListener('click', () => { switchAltPanel(btn.dataset.panel); focusMenuItem(btn.dataset.panel); });
   });
 
   // ---------- 搜索 ----------
@@ -295,33 +295,106 @@
     $('#mpTotalTime').textContent = fmtTime(dur);
   }
 
-  // ---------- 功能菜单（ALT / 顶部菜单 / F4） ----------
+  // ---------- ALT 展开式菜单栏 ----------
   const altOverlay = $('#altOverlay');
+  let altActivePanel = '';
+  const ALT_PANELS = ['play','playlist','charts','source','settings','help'];
+
   function openAlt(panel) {
-    const wasHidden = altOverlay.hidden;
     altOverlay.hidden = false;
-    $$('.alt-panel').forEach(p => p.hidden = true);
-    $$('.alt-tab').forEach(t => { t.classList.remove('open'); t.setAttribute('aria-selected','false'); });
-    const pnl = $('#panel'+panel.charAt(0).toUpperCase()+panel.slice(1));
-    if (pnl) { pnl.hidden = false; renderAltPanel(panel); }
-    const tab = document.querySelector(`.alt-tab[data-panel="${panel}"]`);
-    if (tab) { tab.classList.add('open'); tab.setAttribute('aria-selected','true'); }
-    // 如果是从隐藏打开的，聚焦到当前tab
-    if (wasHidden && tab) tab.focus();
+    switchAltPanel(panel || 'play');
+    // 聚焦第一个菜单项
+    const firstMi = document.querySelector('.alt-mi');
+    if (firstMi) firstMi.focus();
   }
   function closeAlt() {
     altOverlay.hidden = true;
-    $$('.alt-panel').forEach(p => p.hidden = true);
-    $$('.alt-tab').forEach(t => { t.classList.remove('open'); t.setAttribute('aria-selected','false'); });
+    $$('.alt-dd').forEach(d => d.hidden = true);
+    $$('.alt-mi').forEach(m => { m.classList.remove('open'); m.setAttribute('aria-expanded','false'); });
+    altActivePanel = '';
     $('#searchInput').focus();
+  }
+  function switchAltPanel(panel) {
+    altActivePanel = panel;
+    $$('.alt-dd').forEach(d => d.hidden = true);
+    $$('.alt-mi').forEach(m => { m.classList.remove('open'); m.setAttribute('aria-expanded','false'); });
+    const dd = $('#dd'+panel.charAt(0).toUpperCase()+panel.slice(1));
+    if (dd) { dd.hidden = false; renderAltPanel(panel); }
+    const mi = document.querySelector(`.alt-mi[data-panel="${panel}"]`);
+    if (mi) { mi.classList.add('open'); mi.setAttribute('aria-expanded','true'); }
+    // 音源管理面板：渲染完后聚焦第一个音源
+    if (panel === 'source') {
+      setTimeout(() => {
+        const firstSrc = document.querySelector('#ddSource .alt-dd-item');
+        if (firstSrc) firstSrc.focus();
+      }, 50);
+    }
+  }
+  function focusMenuItem(panel) {
+    const mi = document.querySelector(`.alt-mi[data-panel="${panel}"]`);
+    if (mi) mi.focus();
+  }
+  function focusPanelFirstItem(panel) {
+    const dd = $('#dd'+panel.charAt(0).toUpperCase()+panel.slice(1));
+    if (!dd) return;
+    const first = dd.querySelector('.alt-dd-item, [tabindex="0"]');
+    if (first) first.focus();
   }
   $('#altClose').addEventListener('click', closeAlt);
   api.menu.onOpen((panel) => openAlt(panel));
   api.menu.onClose(() => closeAlt());
 
-  // ESC关闭菜单、Alt打开默认面板、F4打开音源管理
+  // ALT菜单键盘导航
+  altOverlay.addEventListener('keydown', (e) => {
+    const mis = $$('.alt-mi');
+    const curMi = document.activeElement.closest?.('.alt-mi');
+    const curDdItem = document.activeElement.closest?.('.alt-dd-item');
+    const curPanelBtn = document.activeElement.closest?.('.panel-btn');
+
+    // 左右光标：在菜单项之间切换
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const idx = mis.indexOf(curMi);
+      const next = idx >= 0 && idx < mis.length - 1 ? mis[idx + 1] : mis[0];
+      if (next) { switchAltPanel(next.dataset.panel); next.focus(); }
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const idx = mis.indexOf(curMi);
+      const prev = idx > 0 ? mis[idx - 1] : mis[mis.length - 1];
+      if (prev) { switchAltPanel(prev.dataset.panel); prev.focus(); }
+      return;
+    }
+    // 下光标：从菜单项进入面板内容
+    if (e.key === 'ArrowDown' && curMi && !curDdItem && !curPanelBtn) {
+      e.preventDefault();
+      focusPanelFirstItem(altActivePanel);
+      return;
+    }
+    // 上光标：从面板内容返回菜单项
+    if (e.key === 'ArrowUp' && (curDdItem || curPanelBtn)) {
+      const items = getPanelItems(altActivePanel);
+      const idx = items.indexOf(document.activeElement);
+      if (idx === 0 || idx === -1) {
+        e.preventDefault();
+        focusMenuItem(altActivePanel);
+        return;
+      }
+    }
+    // Enter：在菜单项上展开面板；在面板项上执行
+    if (e.key === 'Enter' && curMi) {
+      e.preventDefault();
+      switchAltPanel(curMi.dataset.panel);
+      focusPanelFirstItem(curMi.dataset.panel);
+      return;
+    }
+    // ESC 关闭
+    if (e.key === 'Escape') { closeAlt(); return; }
+  });
+
+  // 全局快捷键
   document.addEventListener('keydown', (e) => {
-    if (e.key==='Escape' && !altOverlay.hidden) { closeAlt(); return; }
     if (e.key==='Alt' && !e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
       if (altOverlay.hidden) openAlt('play'); else closeAlt();
@@ -345,6 +418,12 @@
       if (map[e.key.toLowerCase()]) { e.preventDefault(); openAlt(map[e.key.toLowerCase()]); }
     }
   });
+
+  function getPanelItems(panel) {
+    const dd = $('#dd'+panel.charAt(0).toUpperCase()+panel.slice(1));
+    if (!dd) return [];
+    return $$('.alt-dd-item, .panel-btn', dd);
+  }
 
   function isTypingInInput(target) {
     if (!target) return false;
@@ -441,62 +520,87 @@
       });
 
     } else if (panel==='source') {
-      // 音源管理面板
       const list = state.sources;
       el.innerHTML = `
-        <h3>音源管理 <span style="font-size:11px;color:var(--muted)">(${list.filter(s=>s.enabled).length}/${list.length} 已启用)</span></h3>
-        <div style="margin-bottom:10px;display:flex;gap:8px">
-          <button class="btn btn-p" id="srcImportFile">导入本地</button>
-          <button class="btn btn-g" id="srcImportUrl">导入链接</button>
-          <button class="btn btn-g" id="srcCheckAll">检测全部</button>
-        </div>
-        <div id="srcList">
+        <h3>音源管理 (${list.filter(s=>s.enabled).length}/${list.length} 已启用)</h3>
+        <div id="srcList" role="listbox" aria-label="音源列表" tabindex="0">
           ${list.map((src,i)=>`
-            <div class="src-row" data-sidx="${i}">
-              <div>
-                <span class="sr-name">${src.name}</span>
-                <span class="sr-type ${src.builtin?'local':src.type}">${src.builtin?'内置':src.type==='js'?'JS':'URL'}</span>
-                <span class="sr-detail">${src.author||''} ${src.version||''} · ${src.platformLabels?.join(' ')||''}</span>
-              </div>
-              <div style="display:flex;gap:6px;align-items:center">
-                <span class="ap-badge" style="${src.enabled?'':'opacity:0.4'}">${src.enabled?'已启用':'已禁用'}</span>
-                <button class="btn-mini" data-act="src-toggle">${src.enabled?'禁用':'启用'}</button>
-                ${src.builtin?'':'<button class="btn-mini" data-act="src-del">删除</button>'}
-              </div>
+            <div class="alt-dd-item" role="option" tabindex="0" data-sidx="${i}" aria-selected="false"
+                 aria-label="${src.name} ${src.author||''} ${src.enabled?'已启用':'已禁用'} ${src.platformLabels?.join(' ')||''}">
+              <span class="ddi-label">${src.name}</span>
+              <span class="ddi-detail">${src.author||''} ${src.version||''}</span>
+              <span class="ddi-badge">${src.enabled?'已启用':'已禁用'}</span>
             </div>
           `).join('')}
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button class="btn btn-p panel-btn" id="srcImportBtn" tabindex="0">导入音源</button>
+          <button class="btn btn-g panel-btn" id="srcCheckAll" tabindex="0">检测全部</button>
         </div>`;
-      $('#srcImportFile')?.addEventListener('click', async () => {
-        const res = await api.source.importFile();
-        if (res.ok) { announce('导入成功：'+res.source.name); await loadSources(); renderAltPanel('source'); }
-        else announce('导入失败：'+(res.error||'未知错误'));
+
+      // 音源列表键盘导航：上下循环
+      const srcList = $('#srcList');
+      srcList.addEventListener('keydown', async (e) => {
+        const items = $$('.alt-dd-item', srcList);
+        if (!items.length) return;
+        const cur = document.activeElement;
+        const idx = items.indexOf(cur);
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const next = idx >= 0 && idx < items.length - 1 ? items[idx + 1] : items[0];
+          next.focus();
+          announce(next.getAttribute('aria-label'));
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prev = idx > 0 ? items[idx - 1] : items[items.length - 1];
+          prev.focus();
+          announce(prev.getAttribute('aria-label'));
+          return;
+        }
+        // Tab 到导入按钮
+        if (e.key === 'Tab' && !e.shiftKey) {
+          const last = items[items.length - 1];
+          if (cur === last) {
+            e.preventDefault();
+            $('#srcImportBtn')?.focus();
+            return;
+          }
+        }
+        // Enter 或上下文菜单
+        if (e.key === 'Enter' || e.key === 'Menu' || e.key === 'ContextMenu') {
+          e.preventDefault();
+          const srcIdx = +cur.dataset.sidx;
+          const src = state.sources[srcIdx];
+          if (!src) return;
+          showSourceContextMenu(src, srcIdx, cur);
+          return;
+        }
       });
-      $('#srcImportUrl')?.addEventListener('click', async () => {
-        const url = window.prompt('音源链接');
-        if (!url) return;
-        const res = await api.source.importUrl(url);
-        if (res.ok) { announce('导入成功：'+res.source.name); await loadSources(); renderAltPanel('source'); }
-        else announce('导入失败：'+(res.error||'未知错误'));
+
+      // 音源项点击/右键菜单
+      $$('.alt-dd-item', srcList).forEach(item => {
+        item.addEventListener('click', () => {
+          const srcIdx = +item.dataset.sidx;
+          const src = state.sources[srcIdx];
+          showSourceContextMenu(src, srcIdx, item);
+        });
+        item.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          const srcIdx = +item.dataset.sidx;
+          const src = state.sources[srcIdx];
+          showSourceContextMenu(src, srcIdx, item);
+        });
+      });
+
+      // 导入按钮
+      $('#srcImportBtn')?.addEventListener('click', () => showImportMenu());
+      $('#srcImportBtn')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); showImportMenu(); }
       });
       $('#srcCheckAll')?.addEventListener('click', () => checkSources());
-      $$('#srcList .btn-mini').forEach(btn => btn.addEventListener('click', async (e) => {
-        const row = e.target.closest('.src-row');
-        const idx = +row.dataset.sidx;
-        const act = e.target.dataset.act;
-        if (act==='src-toggle') {
-          const src = state.sources[idx];
-          src.enabled = !src.enabled;
-          await api.source.setEnabled(src.id, src.enabled);
-          renderAltPanel('source');
-          announce(src.name + (src.enabled?' 已启用':' 已禁用'));
-        } else if (act==='src-del') {
-          const src = state.sources[idx];
-          await api.source.remove(src.id);
-          state.sources.splice(idx,1);
-          renderAltPanel('source');
-          announce('已删除：'+src.name);
-        }
-      }));
     }
   }
 
@@ -538,6 +642,127 @@
       sb.innerHTML = `<span>当前未播放</span><span class="sb-sep">|</span><span>当前列表共 0 项</span><span class="sb-sep">|</span><span class="sb-checking">已加载 ${total} 个音源，正在后台逐站实测检测。站点检测完成，${ok} 个可用</span>`;
     } else {
       sb.innerHTML = `<span>当前未播放</span><span class="sb-sep">|</span><span>当前列表共 0 项</span><span class="sb-sep">|</span><span class="sb-source">已加载 ${total} 个音源，${ok} 个可用</span>`;
+    }
+  }
+
+  // 音源上下文菜单
+  async function showSourceContextMenu(src, idx, el) {
+    const menuOverlay = document.createElement('div');
+    menuOverlay.className = 'ctx-overlay';
+    menuOverlay.innerHTML = `
+      <div class="ctx-menu" role="menu" aria-label="${src.name} 操作菜单">
+        <button class="ctx-item" role="menuitem" data-act="toggle">${src.enabled?'禁用':'启用'}</button>
+        <button class="ctx-item" role="menuitem" data-act="check">刷新/检测</button>
+        ${src.builtin?'':'<button class="ctx-item" role="menuitem" data-act="del">删除</button>'}
+        <button class="ctx-item" role="menuitem" data-act="cancel">取消</button>
+      </div>`;
+    document.body.appendChild(menuOverlay);
+
+    const items = $$('.ctx-item', menuOverlay);
+    let curIdx = 0;
+    items[0]?.focus();
+
+    function closeCtx() { menuOverlay.remove(); el?.focus(); }
+
+    menuOverlay.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        curIdx = curIdx < items.length - 1 ? curIdx + 1 : 0;
+        items[curIdx].focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        curIdx = curIdx > 0 ? curIdx - 1 : items.length - 1;
+        items[curIdx].focus();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        execAction(items[curIdx].dataset.act);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeCtx();
+      }
+    });
+
+    items.forEach((btn, i) => {
+      btn.addEventListener('click', () => execAction(btn.dataset.act));
+      btn.addEventListener('focus', () => { curIdx = i; });
+    });
+
+    async function execAction(act) {
+      closeCtx();
+      if (act === 'toggle') {
+        src.enabled = !src.enabled;
+        await api.source.setEnabled(src.id, src.enabled);
+        renderAltPanel('source');
+        announce(src.name + (src.enabled ? ' 已启用' : ' 已禁用'));
+      } else if (act === 'check') {
+        announce('正在检测 ' + src.name + '…');
+        try {
+          const res = await api.source.check(src.id);
+          announce(src.name + (res.ok ? ' 检测通过' : ' 检测失败'));
+        } catch (e) { announce(src.name + ' 检测失败'); }
+      } else if (act === 'del') {
+        await api.source.remove(src.id);
+        state.sources.splice(idx, 1);
+        renderAltPanel('source');
+        announce('已删除：' + src.name);
+      }
+    }
+  }
+
+  // 导入音源菜单
+  function showImportMenu() {
+    const menuOverlay = document.createElement('div');
+    menuOverlay.className = 'ctx-overlay';
+    menuOverlay.innerHTML = `
+      <div class="ctx-menu" role="menu" aria-label="导入音源">
+        <button class="ctx-item" role="menuitem" data-act="url">网址导入</button>
+        <button class="ctx-item" role="menuitem" data-act="file">本地导入</button>
+        <button class="ctx-item" role="menuitem" data-act="cancel">取消</button>
+      </div>`;
+    document.body.appendChild(menuOverlay);
+
+    const items = $$('.ctx-item', menuOverlay);
+    let curIdx = 0;
+    items[0]?.focus();
+
+    function closeCtx() { menuOverlay.remove(); $('#srcImportBtn')?.focus(); }
+
+    menuOverlay.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        curIdx = curIdx < items.length - 1 ? curIdx + 1 : 0;
+        items[curIdx].focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        curIdx = curIdx > 0 ? curIdx - 1 : items.length - 1;
+        items[curIdx].focus();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        execAction(items[curIdx].dataset.act);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeCtx();
+      }
+    });
+
+    items.forEach((btn, i) => {
+      btn.addEventListener('click', () => execAction(btn.dataset.act));
+      btn.addEventListener('focus', () => { curIdx = i; });
+    });
+
+    async function execAction(act) {
+      closeCtx();
+      if (act === 'url') {
+        const url = window.prompt('音源链接');
+        if (!url) return;
+        const res = await api.source.importUrl(url);
+        if (res.ok) { announce('导入成功：' + res.source.name); await loadSources(); renderAltPanel('source'); }
+        else announce('导入失败：' + (res.error || '未知错误'));
+      } else if (act === 'file') {
+        const res = await api.source.importFile();
+        if (res.ok) { announce('导入成功：' + res.source.name); await loadSources(); renderAltPanel('source'); }
+        else announce('导入失败：' + (res.error || '未知错误'));
+      }
     }
   }
 

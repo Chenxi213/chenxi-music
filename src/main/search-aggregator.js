@@ -360,15 +360,42 @@ class SearchAggregator extends EventEmitter {
         },
         utils: {
           buffer: {
-            from: (s) => Buffer.from(s),
-            bufToString: (b) => b.toString(),
+            from: (s, enc) => Buffer.from(s, enc),
+            bufToString: (b, enc) => Buffer.isBuffer(b) ? b.toString(enc || 'utf8') : String(b),
           },
           crypto: {
-            md5: () => '',
-            rsaEncrypt: () => '',
-            randomBytes: () => Buffer.alloc(0),
-            aesEncrypt: () => '',
-            decode: (s) => s,
+            md5: (s) => {
+              try { return require('crypto').createHash('md5').update(String(s)).digest('hex'); }
+              catch (e) { return ''; }
+            },
+            md5Prefix: (s) => {
+              try { return require('crypto').createHash('md5').update(String(s)).digest('hex').substring(0, 16); }
+              catch (e) { return ''; }
+            },
+            rsaEncrypt: (s, key) => {
+              try {
+                const crypto = require('crypto');
+                return crypto.publicEncrypt({ key: String(key), padding: crypto.constants.RSA_PKCS1_PADDING }, Buffer.from(String(s))).toString('base64');
+              } catch (e) { return ''; }
+            },
+            aesEncrypt: (s, key, iv, mode = 'CBC') => {
+              try {
+                const crypto = require('crypto');
+                const alg = mode === 'ECB' ? 'aes-128-ecb' : 'aes-128-cbc';
+                const cipher = crypto.createCipheriv(alg, Buffer.from(key), iv ? Buffer.from(iv) : Buffer.alloc(0));
+                let out = cipher.update(String(s), 'utf8', 'base64');
+                out += cipher.final('base64');
+                return out;
+              } catch (e) { return ''; }
+            },
+            randomBytes: (len) => {
+              try { return require('crypto').randomBytes(Math.max(1, len || 8)).toString('hex'); }
+              catch (e) { return Buffer.alloc(Math.max(1, len || 8)).toString('hex'); }
+            },
+            decode: (s) => {
+              try { return Buffer.from(String(s), 'base64').toString('utf8'); }
+              catch (e) { return String(s); }
+            },
           },
           url: {
             encode: encodeURIComponent,
