@@ -59,8 +59,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "requestedExecutionLevel": "asInvoker",
-      "artifactName": "${productName}-${version}-portable.${ext}"
+      "requestedExecutionLevel": "asInvoker"
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable.${ext}"

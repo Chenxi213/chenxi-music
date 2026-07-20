@@ -1,12 +1,10 @@
-name: 辰曦音乐 - Windows 便携版打包
+name: 辰曦音乐 - 打包
 
 on:
   push:
     branches: [main, master]
     tags: ['v*']
   workflow_dispatch:
-  pull_request:
-    branches: [main, master]
 
 permissions:
   contents: write
@@ -23,13 +21,12 @@ jobs:
 
       - run: npm install
 
-      - name: Build portable
-        run: npx electron-builder --win --publish always
+      - name: Build
+        run: npx electron-builder --win portable --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload portable exe
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: chenxi-music-portable
           path: dist/*.exe
