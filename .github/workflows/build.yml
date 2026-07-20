@@ -21,17 +21,33 @@ jobs:
 
       - run: npm install
 
-      - name: Build portable (with auto-update)
-        run: npx electron-builder --win portable --publish always
+      - name: Build unpacked directory
+        run: npx electron-builder --win --dir
+
+      - name: Create portable marker
+        run: |
+          New-Item -Path "dist\win-unpacked\portable.flag" -ItemType File -Force
+
+      - name: Zip as portable
+        run: Compress-Archive -Path "dist\win-unpacked\*" -DestinationPath "dist\辰曦音乐-portable.zip" -Force
+
+      - name: Get version
+        id: ver
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          echo "VERSION=$($pkg.version)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release upload $tag "dist\辰曦音乐-portable.zip" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/upload-artifact@v4
         with:
           name: chenxi-music-portable
-          path: |
-            dist/*.exe
-            dist/latest.yml
-            dist/*.blockmap
+          path: dist/辰曦音乐-portable.zip
           retention-days: 90
           if-no-files-found: ignore
