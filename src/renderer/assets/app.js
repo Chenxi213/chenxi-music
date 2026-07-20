@@ -30,8 +30,8 @@
     if (api?.zdsr) api.zdsr.speak(text, true);
   }
 
-  // ---------- 顶部菜单栏 ----------
-  $$('.tm-item').forEach(btn => {
+  // ---------- 顶部菜单栏（已移除，改用ALT tab） ----------
+  $$('.alt-tab').forEach(btn => {
     btn.addEventListener('click', () => openAlt(btn.dataset.panel));
   });
 
@@ -298,12 +298,23 @@
   // ---------- 功能菜单（ALT / 顶部菜单 / F4） ----------
   const altOverlay = $('#altOverlay');
   function openAlt(panel) {
+    const wasHidden = altOverlay.hidden;
     altOverlay.hidden = false;
     $$('.alt-panel').forEach(p => p.hidden = true);
+    $$('.alt-tab').forEach(t => { t.classList.remove('open'); t.setAttribute('aria-selected','false'); });
     const pnl = $('#panel'+panel.charAt(0).toUpperCase()+panel.slice(1));
     if (pnl) { pnl.hidden = false; renderAltPanel(panel); }
+    const tab = document.querySelector(`.alt-tab[data-panel="${panel}"]`);
+    if (tab) { tab.classList.add('open'); tab.setAttribute('aria-selected','true'); }
+    // 如果是从隐藏打开的，聚焦到当前tab
+    if (wasHidden && tab) tab.focus();
   }
-  function closeAlt() { altOverlay.hidden = true; $$('.alt-panel').forEach(p => p.hidden = true); }
+  function closeAlt() {
+    altOverlay.hidden = true;
+    $$('.alt-panel').forEach(p => p.hidden = true);
+    $$('.alt-tab').forEach(t => { t.classList.remove('open'); t.setAttribute('aria-selected','false'); });
+    $('#searchInput').focus();
+  }
   $('#altClose').addEventListener('click', closeAlt);
   api.menu.onOpen((panel) => openAlt(panel));
   api.menu.onClose(() => closeAlt());
@@ -311,8 +322,9 @@
   // ESC关闭菜单、Alt打开默认面板、F4打开音源管理
   document.addEventListener('keydown', (e) => {
     if (e.key==='Escape' && !altOverlay.hidden) { closeAlt(); return; }
-    if (e.key==='Alt' && !e.ctrlKey && !e.shiftKey && altOverlay.hidden) {
-      setTimeout(() => { if (altOverlay.hidden) openAlt('play'); }, 50);
+    if (e.key==='Alt' && !e.ctrlKey && !e.shiftKey) {
+      e.preventDefault();
+      if (altOverlay.hidden) openAlt('play'); else closeAlt();
       return;
     }
     if (e.key==='F4' && !isTypingInInput(e.target)) {
@@ -329,7 +341,7 @@
       return;
     }
     if (e.altKey && !e.ctrlKey && !e.shiftKey) {
-      const map = { p:'play', l:'playlist', c:'charts', s:'settings', h:'help' };
+      const map = { p:'play', l:'playlist', r:'charts', s:'settings', h:'help' };
       if (map[e.key.toLowerCase()]) { e.preventDefault(); openAlt(map[e.key.toLowerCase()]); }
     }
   });

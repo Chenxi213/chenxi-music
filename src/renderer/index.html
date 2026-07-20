@@ -8,35 +8,12 @@
 </head>
 <body>
 
-<!-- 顶部菜单栏（模仿辰星音乐风格） -->
-<header class="top-menu" role="menubar" aria-label="主菜单">
-  <button class="tm-item" data-panel="play" accesskey="E" role="menuitem">
-    <span>文件</span><span class="tm-key">(E)</span>
-  </button>
-  <button class="tm-item" data-panel="play" accesskey="P" role="menuitem">
-    <span>播放</span><span class="tm-key">(P)</span>
-  </button>
-  <button class="tm-item" data-panel="charts" accesskey="R" role="menuitem">
-    <span>排行榜</span><span class="tm-key">(R)</span>
-  </button>
-  <button class="tm-item" data-panel="playlist" accesskey="G" role="menuitem">
-    <span>歌单</span><span class="tm-key">(G)</span>
-  </button>
-  <button class="tm-item" data-panel="settings" accesskey="C" role="menuitem">
-    <span>设置</span><span class="tm-key">(C)</span>
-  </button>
-  <button class="tm-item" data-panel="help" accesskey="H" role="menuitem">
-    <span>帮助</span><span class="tm-key">(H)</span>
-  </button>
-</header>
-
 <main class="main-wrap" role="main" aria-label="辰曦音乐主界面">
 
-  <!-- 搜索区域（下拉框风格） -->
+  <!-- 搜索区域（下拉框风格，参考截图的平台筛选+分类） -->
   <section class="search-section" aria-label="搜索区域">
     <div class="search-toolbar">
       <div class="search-icon" aria-hidden="true">♪</div>
-      <label class="search-label" for="searchInput">搜索:</label>
       <input
         id="searchInput"
         class="search-input"
@@ -47,14 +24,12 @@
         spellcheck="false"
         accesskey="F"
       >
-      <label class="search-label" for="scopeSelect">范围:</label>
       <select id="scopeSelect" class="search-select" aria-label="搜索范围">
         <option value="song">歌曲</option>
         <option value="playlist">歌单</option>
         <option value="album">专辑</option>
         <option value="singer">歌手</option>
       </select>
-      <label class="search-label" for="siteSelect">站点:</label>
       <select id="siteSelect" class="search-select" aria-label="搜索站点">
         <option value="all">全部站点</option>
         <option value="wy">网易云音乐</option>
@@ -64,24 +39,24 @@
         <option value="mg">咪咕</option>
         <option value="qsvip">汽水VIP</option>
       </select>
-      <button id="searchBtn" class="search-btn" aria-label="搜索按钮">
+      <button id="searchBtn" class="search-btn" aria-label="搜索">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
           <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
-        <span>搜索</span>
       </button>
-      <span id="searchMeta" class="search-meta" aria-live="polite">搜索结果，共 0 首</span>
+      <span id="searchMeta" class="search-meta" aria-live="polite"></span>
     </div>
-
-    <!-- 类型筛选（简化版） -->
-    <div class="filter-row" style="margin-top:8px">
-      <span class="filter-label">筛选</span>
+    <div class="filter-row">
+      <span class="filter-label">音质</span>
       <div class="chips" role="group" aria-label="音质筛选" id="qualityChips">
         <button class="chip on" data-q="all" role="checkbox" aria-checked="true">全部</button>
         <button class="chip" data-q="hr" role="checkbox" aria-checked="false">Hi-Res</button>
         <button class="chip" data-q="loss" role="checkbox" aria-checked="false">无损</button>
-        <button class="chip" data-q="live" role="checkbox" aria-checked="false">Live</button>
+        <button class="chip" data-q="std" role="checkbox" aria-checked="false">标准</button>
       </div>
+    </div>
+    <div class="alt-hint">
+      按 <kbd>Alt</kbd> 呼出功能菜单 &nbsp;<span class="dot">·</span>&nbsp; <kbd>F4</kbd> 音源管理 &nbsp;<span class="dot">·</span>&nbsp; <kbd>↑</kbd><kbd>↓</kbd> 浏览结果 &nbsp;<span class="dot">·</span>&nbsp; <kbd>Menu</kbd> 歌曲菜单
     </div>
   </section>
 
@@ -107,11 +82,7 @@
 
 <!-- 底部状态栏 -->
 <div class="status-bar" id="statusBar" role="status" aria-live="polite">
-  <span>当前未播放</span>
-  <span class="sb-sep">|</span>
-  <span>当前列表共 0 项</span>
-  <span class="sb-sep">|</span>
-  <span>已加载 0 个音源</span>
+  <span>当前未播放</span><span class="sb-sep">|</span><span>共 0 项</span><span class="sb-sep">|</span><span id="sbSource">已加载 0 个音源</span>
 </div>
 
 <!-- 迷你播放条 -->
@@ -121,7 +92,7 @@
     <span class="mp-artist" id="mpArtist"></span>
     <span class="mp-quality" id="mpQuality"></span>
   </div>
-  <div class="mp-progress" id="mpProgress" role="slider" aria-label="播放进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+  <div class="mp-progress" id="mpProgress" role="slider" aria-label="播放进度" tabindex="0">
     <div class="mp-progress-fill" id="mpProgressFill"></div>
   </div>
   <div class="mp-time">
@@ -135,20 +106,28 @@
   </div>
 </footer>
 
-<!-- 功能菜单覆盖层（原ALT菜单，保留但改为下拉面板风格） -->
-<div class="alt-overlay" id="altOverlay" role="dialog" aria-label="功能菜单" aria-modal="false" hidden>
-  <div class="alt-panels">
-    <div class="alt-panel" id="panelPlay" role="region" aria-label="播放面板" hidden></div>
-    <div class="alt-panel" id="panelPlaylist" role="region" aria-label="歌单面板" hidden></div>
-    <div class="alt-panel" id="panelCharts" role="region" aria-label="排行榜面板" hidden></div>
-    <div class="alt-panel" id="panelSettings" role="region" aria-label="设置面板" hidden></div>
-    <div class="alt-panel" id="panelHelp" role="region" aria-label="帮助面板" hidden></div>
-    <div class="alt-panel" id="panelSource" role="region" aria-label="音源管理面板" hidden></div>
+<!-- ALT 功能菜单覆盖层（参考截图的菜单tab布局） -->
+<div class="alt-overlay" id="altOverlay" role="dialog" aria-label="功能菜单" hidden>
+  <div class="alt-menu" role="tablist" aria-label="菜单标签">
+    <button class="alt-tab" data-panel="play" role="tab" aria-selected="false">播放 <kbd class="alt-key">Alt+P</kbd></button>
+    <button class="alt-tab" data-panel="playlist" role="tab" aria-selected="false">歌单 <kbd class="alt-key">Alt+L</kbd></button>
+    <button class="alt-tab" data-panel="charts" role="tab" aria-selected="false">排行榜 <kbd class="alt-key">Alt+R</kbd></button>
+    <button class="alt-tab" data-panel="source" role="tab" aria-selected="false">音源 <kbd class="alt-key">F4</kbd></button>
+    <button class="alt-tab" data-panel="settings" role="tab" aria-selected="false">设置 <kbd class="alt-key">Alt+S</kbd></button>
+    <button class="alt-tab" data-panel="help" role="tab" aria-selected="false">帮助 <kbd class="alt-key">Alt+H</kbd></button>
+    <button class="alt-close" id="altClose" aria-label="关闭菜单">✕</button>
   </div>
-  <button class="alt-close" id="altClose" aria-label="关闭菜单">✕ 关闭</button>
+  <div class="alt-panels">
+    <div class="alt-panel" id="panelPlay" role="tabpanel" hidden></div>
+    <div class="alt-panel" id="panelPlaylist" role="tabpanel" hidden></div>
+    <div class="alt-panel" id="panelCharts" role="tabpanel" hidden></div>
+    <div class="alt-panel" id="panelSource" role="tabpanel" hidden></div>
+    <div class="alt-panel" id="panelSettings" role="tabpanel" hidden></div>
+    <div class="alt-panel" id="panelHelp" role="tabpanel" hidden></div>
+  </div>
 </div>
 
-<!-- 争渡读屏播报状态 -->
+<!-- 争渡读屏播报 -->
 <div class="sr-only" id="liveRegion" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="assets/app.js"></script>
