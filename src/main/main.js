@@ -133,95 +133,113 @@ async function createWindow() {
  * ALT菜单体系 + 媒体键
  */
 function registerShortcuts() {
+  // F4 打开音源管理
+  globalShortcut.register('F4', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('menu:open', 'source');
+    }
+  });
   // ALT+P 播放面板
   globalShortcut.register('Alt+P', () => {
-    mainWindow?.webContents.send('menu:open', 'play');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('menu:open', 'play');
   });
   // ALT+L 歌单
   globalShortcut.register('Alt+L', () => {
-    mainWindow?.webContents.send('menu:open', 'playlist');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('menu:open', 'playlist');
   });
   // ALT+C 排行榜
   globalShortcut.register('Alt+C', () => {
-    mainWindow?.webContents.send('menu:open', 'charts');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('menu:open', 'charts');
   });
   // ALT+S 设置
   globalShortcut.register('Alt+S', () => {
-    mainWindow?.webContents.send('menu:open', 'settings');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('menu:open', 'settings');
   });
   // ALT+H 帮助
   globalShortcut.register('Alt+H', () => {
-    mainWindow?.webContents.send('menu:open', 'help');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('menu:open', 'help');
   });
   // Alt+Esc 关闭菜单
   globalShortcut.register('Alt+Escape', () => {
-    mainWindow?.webContents.send('menu:close');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('menu:close');
   });
   // 媒体键
   globalShortcut.register('MediaPlayPause', () => {
     if (audio.playing) audio.pause(); else audio.resume();
   });
   globalShortcut.register('MediaNextTrack', () => {
-    mainWindow?.webContents.send('audio:next');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('audio:next');
   });
   globalShortcut.register('MediaPreviousTrack', () => {
-    mainWindow?.webContents.send('audio:prev');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('audio:prev');
   });
 }
 
 // ---------- 自动更新 ----------
 function registerUpdater() {
-  // GitHub Releases 自动更新：每次 push tag (v*) 到 main 后
-  // GitHub Actions 打包并发布到 Releases，autoUpdater 自动检测
+  // GitHub Releases 自动更新 + 增量更新(blockmap)
   autoUpdater.setFeedURL({
     provider: 'github',
     owner: 'Chenxi213',
-    repo: 'chenxi-music'
+    repo: 'chenxi-music',
+    private: false
   });
+  autoUpdater.allowDowngrade = false;
+  autoUpdater.allowPrerelease = false;
 
   // 启动时自动检查一次更新（静默，不弹窗打扰）
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch(() => {});
-  }, 10000);
+  }, 15000);
 
   autoUpdater.on('update-available', (info) => {
-    mainWindow?.webContents.send('app:update-available', info);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-available', info);
+    }
   });
   autoUpdater.on('update-not-available', () => {
-    mainWindow?.webContents.send('app:update-not-available');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-not-available');
+    }
   });
   autoUpdater.on('download-progress', (progress) => {
-    mainWindow?.webContents.send('app:update-progress', progress);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-progress', progress);
+    }
   });
   autoUpdater.on('update-downloaded', () => {
-    mainWindow?.webContents.send('app:update-downloaded');
-    // 下载完成后提示重启安装
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-downloaded');
+    }
     const { dialog } = require('electron');
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: '更新就绪',
-      message: '新版本已下载完成，重启后即可安装。',
-      buttons: ['立即重启', '稍后'],
-      defaultId: 0
-    }).then(({ response }) => {
-      if (response === 0) autoUpdater.quitAndInstall();
-    });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: '更新就绪',
+        message: '新版本已下载完成，重启后即可安装。',
+        buttons: ['立即重启', '稍后'],
+        defaultId: 0
+      }).then(({ response }) => {
+        if (response === 0) autoUpdater.quitAndInstall();
+      });
+    }
   });
   autoUpdater.on('error', (err) => {
-    // 静默处理网络错误，不打扰用户
     console.log('更新检查:', err.message);
   });
 
   ipcMain.handle('app:check-update', async () => {
     try {
       const result = await autoUpdater.checkForUpdates();
-      if (result) {
-        return { ok: true, updateAvailable: false, version: app.getVersion() };
-      }
-      return { ok: true, updateAvailable: false, version: app.getVersion() };
+      const hasUpdate = result && result.updateInfo && result.updateInfo.version !== app.getVersion();
+      return {
+        hasUpdate: !!hasUpdate,
+        version: result?.updateInfo?.version || app.getVersion(),
+        releaseNotes: result?.updateInfo?.releaseNotes || '',
+        url: 'https://github.com/Chenxi213/chenxi-music/releases'
+      };
     } catch (e) {
-      // 未配置更新源时返回当前版本
-      return { ok: true, updateAvailable: false, version: app.getVersion() };
+      return { hasUpdate: false, version: app.getVersion(), error: e.message };
     }
   });
 

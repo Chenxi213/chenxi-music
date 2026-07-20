@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('chenxi', {
     setEnabled: (id, on) => ipcRenderer.invoke('src:set-enabled', { id, on }),
     remove: (id) => ipcRenderer.invoke('src:remove', { id }),
     getUrl: (sourceId, platform, musicInfo, quality) => ipcRenderer.invoke('src:get-url', { sourceId, platform, musicInfo, quality }),
+    check: (id) => ipcRenderer.invoke('src:check', { id }),
     onAdded: (cb) => ipcRenderer.on('src:added', (e, s) => cb(s))
   },
   // 搜索

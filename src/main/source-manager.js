@@ -606,6 +606,32 @@ class SourceManager extends EventEmitter {
         return { ok: true, url };
       } catch (err) { return { ok: false, error: err.message }; }
     });
+    // 音源可用性检测：尝试对内置音源做简单连通性测试
+    ipcMain.handle('src:check', async (e, { id }) => {
+      const src = this.sources.find(s => s.id === id);
+      if (!src) return { ok: false, error: 'source not found' };
+      try {
+        // 对 URL 音源做 HTTP HEAD 探测
+        if (src.url || src.apiUrl) {
+          const url = src.url || src.apiUrl;
+          return await new Promise((resolve) => {
+            const lib = url.startsWith('https') ? https : http;
+            const req = lib.request(url, { method: 'HEAD', headers: { 'User-Agent': 'chenxi-music/0.1' }, timeout: 5000 }, (res) => {
+              resolve({ ok: res.statusCode < 500 });
+            });
+            req.on('error', () => resolve({ ok: false }));
+            req.on('timeout', () => { req.destroy(); resolve({ ok: false }); });
+            req.end();
+          });
+        }
+        // JS 音源（内置/本地）默认认为可用，尝试解析
+        if (src.code) {
+          const info = await this.parseLxScript(src.code);
+          return { ok: !!info.name };
+        }
+        return { ok: true };
+      } catch (err) { return { ok: false, error: err.message }; }
+    });
   }
 }
 
